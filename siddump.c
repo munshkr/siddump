@@ -86,6 +86,7 @@ int main(int argc, char **argv)
   int timeseconds = 0;
   int usage = 0;
   int profiling = 0;
+  int csv_output = 0;
   unsigned loadend;
   unsigned loadpos;
   unsigned loadsize;
@@ -152,6 +153,10 @@ int main(int argc, char **argv)
         case 'Z':
         profiling = 1;
         break;
+
+        case 'R':
+        csv_output = 1;
+        break;
       }
     }
     else
@@ -177,7 +182,8 @@ int main(int argc, char **argv)
            "-p<value> Pattern spacing, default 0 (none)\n"
            "-s        Display time in minutes:seconds:frame format\n"
            "-t<value> Playback time in seconds, default 60\n"
-           "-z        Include CPU cycles+rastertime (PAL)+rastertime, badline corrected\n");
+           "-z        Include CPU cycles+rastertime (PAL)+rastertime, badline corrected\n"
+           "-r        Output table in a command-separated values file (.csv)\n");
     return 1;
   }
 
@@ -280,18 +286,30 @@ int main(int argc, char **argv)
   fprintf(stderr, "Calling playroutine for %d frames, starting from frame %d\n", seconds*50, firstframe);
   fprintf(stderr, "Middle C frequency is $%04X\n\n", freqtbllo[48] | (freqtblhi[48] << 8));
 
-  printf("| Frame | Freq Note/Abs WF ADSR Pul | Freq Note/Abs WF ADSR Pul | Freq Note/Abs WF ADSR Pul | FCut RC Typ V |");
+  if (csv_output) {
+    printf("frame,freq_1,note/abs_1,wf_1,adsr_1,pulse_1,freq_2,note/abs_2,wf_2,adsr_2,pulse_2,freq_3,note/abs_3,wf_3,adsr_3,pulse_3,fcut,res,ftype,vol");
+  } else {
+    printf("| Frame | Freq Note/Abs WF ADSR Pul | Freq Note/Abs WF ADSR Pul | Freq Note/Abs WF ADSR Pul | FCut RC Typ V |");
+  }
+
   if (profiling)
   { // CPU cycles, Raster lines, Raster lines with badlines on every 8th line, first line included
-    printf(" Cycl RL RB |");
+    if (csv_output) {
+      printf(",cycles,rl,rb");
+    } else {
+      printf(" Cycl RL RB |");
+    }
   }
   printf("\n");
-  printf("+-------+---------------------------+---------------------------+---------------------------+---------------+");
-  if (profiling)
-  {
-    printf("------------+");
+
+  if (!csv_output) {
+    printf("+-------+---------------------------+---------------------------+---------------------------+---------------+");
+    if (profiling)
+    {
+      printf("------------+");
+    }
+    printf("\n");
   }
-  printf("\n");
 
   // Data collection & display loop
   while (frames < firstframe + seconds*50)
@@ -333,10 +351,19 @@ int main(int argc, char **argv)
       int time = frames - firstframe;
       output[0] = 0;
 
-      if (!timeseconds)
-        sprintf(&output[strlen(output)], "| %5d | ", time);
-      else
-        sprintf(&output[strlen(output)], "|%01d:%02d.%02d| ", time/3000, (time/50)%60, time%50);
+      if (!timeseconds) {
+        if (csv_output) {
+          sprintf(&output[strlen(output)], "%d,", time);
+        } else {
+          sprintf(&output[strlen(output)], "| %5d | ", time);
+        }
+      } else {
+        if (csv_output) {
+          sprintf(&output[strlen(output)], "%01d:%02d.%02d,", time/3000, (time/50)%60, time%50);
+        } else {
+          sprintf(&output[strlen(output)], "|%01d:%02d.%02d| ", time/3000, (time/50)%60, time%50);
+        }
+      }
 
       // Loop for each channel
       for (c = 0; c < 3; c++)
@@ -357,7 +384,11 @@ int main(int argc, char **argv)
           int dist = 0x7fffffff;
           int delta = ((int)chn[c].freq) - ((int)prevchn2[c].freq);
 
-          sprintf(&output[strlen(output)], "%04X ", chn[c].freq);
+          if (csv_output) {
+            sprintf(&output[strlen(output)], "$%x,", chn[c].freq);
+          } else {
+            sprintf(&output[strlen(output)], "%04X ", chn[c].freq);
+          }
 
           if (chn[c].wave >= 0x10)
           {
@@ -380,63 +411,193 @@ int main(int argc, char **argv)
             if (chn[c].note != prevchn[c].note)
             {
               if (prevchn[c].note == -1)
-               {
+              {
                  if (lowres) newnote = 1;
-                 sprintf(&output[strlen(output)], " %s %02X  ", notename[chn[c].note], chn[c].note | 0x80);
+                 if (csv_output) {
+                   sprintf(&output[strlen(output)], "%s $%x,", notename[chn[c].note], chn[c].note | 0x80);
+                 } else {
+                   sprintf(&output[strlen(output)], " %s %02X  ", notename[chn[c].note], chn[c].note | 0x80);
+                 }
               }
-               else
-                sprintf(&output[strlen(output)], "(%s %02X) ", notename[chn[c].note], chn[c].note | 0x80);
+              else
+              {
+                if (csv_output) {
+                  sprintf(&output[strlen(output)], "(%s $%x),", notename[chn[c].note], chn[c].note | 0x80);
+                } else {
+                  sprintf(&output[strlen(output)], "(%s %02X) ", notename[chn[c].note], chn[c].note | 0x80);
+                }
+              }
             }
             else
             {
               // If same note, print frequency change (slide/vibrato)
               if (delta)
               {
-                if (delta > 0)
-                   sprintf(&output[strlen(output)], "(+ %04X) ", delta);
-                 else
-                   sprintf(&output[strlen(output)], "(- %04X) ", -delta);
+                if (delta > 0) {
+                  if (csv_output) {
+                    sprintf(&output[strlen(output)], "(+ $%x),", delta);
+                  } else {
+                    sprintf(&output[strlen(output)], "(+ %04X) ", delta);
+                  }
+                } else {
+                  if (csv_output) {
+                    sprintf(&output[strlen(output)], "(- $%x),", -delta);
+                  } else {
+                    sprintf(&output[strlen(output)], "(- %04X) ", -delta);
+                  }
+                }
               }
-              else sprintf(&output[strlen(output)], " ... ..  ");
+              else
+              {
+                if (csv_output) {
+                  sprintf(&output[strlen(output)], ",,");
+                } else {
+                  sprintf(&output[strlen(output)], " ... ..  ");
+                }
+              }
             }
           }
-          else sprintf(&output[strlen(output)], " ... ..  ");
+          else 
+          {
+            if (csv_output) {
+              sprintf(&output[strlen(output)], ",,");
+            } else {
+              sprintf(&output[strlen(output)], " ... ..  ");
+            }
+          }
         }
-        else sprintf(&output[strlen(output)], "....  ... ..  ");
+        else
+        {
+          if (csv_output) {
+            sprintf(&output[strlen(output)], ",,,");
+          } else {
+            sprintf(&output[strlen(output)], "....  ... ..  ");
+          }
+        }
 
         // Waveform
-        if ((frames == firstframe) || (newnote) || (chn[c].wave != prevchn[c].wave))
-          sprintf(&output[strlen(output)], "%02X ", chn[c].wave);
-        else sprintf(&output[strlen(output)], ".. ");
+        if ((frames == firstframe) || (newnote) || (chn[c].wave != prevchn[c].wave)) {
+          if (csv_output) {
+            sprintf(&output[strlen(output)], "$%x,", chn[c].wave);
+          } else {
+            sprintf(&output[strlen(output)], "%02X ", chn[c].wave);
+          }
+        }
+        else
+        {
+          if (csv_output) {
+            sprintf(&output[strlen(output)], ",");
+          } else {
+            sprintf(&output[strlen(output)], ".. ");
+          }
+        }
 
         // ADSR
-        if ((frames == firstframe) || (newnote) || (chn[c].adsr != prevchn[c].adsr)) sprintf(&output[strlen(output)], "%04X ", chn[c].adsr);
-        else sprintf(&output[strlen(output)], ".... ");
+        if ((frames == firstframe) || (newnote) || (chn[c].adsr != prevchn[c].adsr)) {
+          if (csv_output) {
+            sprintf(&output[strlen(output)], "$%x,", chn[c].adsr);
+          } else {
+            sprintf(&output[strlen(output)], "%04X ", chn[c].adsr);
+          }
+        }
+        else
+        {
+          if (csv_output) {
+            sprintf(&output[strlen(output)], ",");
+          } else {
+            sprintf(&output[strlen(output)], ".... ");
+          }
+        }
 
         // Pulse
-        if ((frames == firstframe) || (newnote) || (chn[c].pulse != prevchn[c].pulse)) sprintf(&output[strlen(output)], "%03X ", chn[c].pulse);
-        else sprintf(&output[strlen(output)], "... ");
+        if ((frames == firstframe) || (newnote) || (chn[c].pulse != prevchn[c].pulse)) {
+          if (csv_output) {
+            sprintf(&output[strlen(output)], "$%x,", chn[c].pulse);
+          } else {
+            sprintf(&output[strlen(output)], "%03X ", chn[c].pulse);
+          }
+        }
+        else
+        {
+          if (csv_output) {
+            sprintf(&output[strlen(output)], ",");
+          } else {
+            sprintf(&output[strlen(output)], "... ");
+          }
+        }
 
-        sprintf(&output[strlen(output)], "| ");
+        if (csv_output) {
+          sprintf(&output[strlen(output)], ",");
+        } else {
+          sprintf(&output[strlen(output)], "| ");
+        }
       }
 
       // Filter cutoff
-      if ((frames == firstframe) || (filt.cutoff != prevfilt.cutoff)) sprintf(&output[strlen(output)], "%04X ", filt.cutoff);
-      else sprintf(&output[strlen(output)], ".... ");
+      if ((frames == firstframe) || (filt.cutoff != prevfilt.cutoff)) {
+        if (csv_output) {
+          sprintf(&output[strlen(output)], "$%x,", filt.cutoff);
+        } else {
+          sprintf(&output[strlen(output)], "%04X ", filt.cutoff);
+        }
+      }
+      else
+      {
+        if (csv_output) {
+          sprintf(&output[strlen(output)], ",");
+        } else {
+          sprintf(&output[strlen(output)], ".... ");
+        }
+      }
 
       // Filter control
-      if ((frames == firstframe) || (filt.ctrl != prevfilt.ctrl))
-        sprintf(&output[strlen(output)], "%02X ", filt.ctrl);
-      else sprintf(&output[strlen(output)], ".. ");
+      if ((frames == firstframe) || (filt.ctrl != prevfilt.ctrl)) {
+        if (csv_output) {
+          sprintf(&output[strlen(output)], "$%x,", filt.ctrl);
+        } else {
+          sprintf(&output[strlen(output)], "%02X ", filt.ctrl);
+        }
+      } else {
+        if (csv_output) {
+          sprintf(&output[strlen(output)], ",");
+        } else {
+          sprintf(&output[strlen(output)], ".. ");
+        }
+      }
 
       // Filter passband
-      if ((frames == firstframe) || ((filt.type & 0x70) != (prevfilt.type & 0x70)))
-        sprintf(&output[strlen(output)], "%s ", filtername[(filt.type >> 4) & 0x7]);
-      else sprintf(&output[strlen(output)], "... ");
+      if ((frames == firstframe) || ((filt.type & 0x70) != (prevfilt.type & 0x70))) {
+        if (csv_output) {
+          sprintf(&output[strlen(output)], "%s,", filtername[(filt.type >> 4) & 0x7]);
+        } else {
+          sprintf(&output[strlen(output)], "%s ", filtername[(filt.type >> 4) & 0x7]);
+        }
+      }
+      else
+      {
+        if (csv_output) {
+          sprintf(&output[strlen(output)], ",");
+        } else {
+          sprintf(&output[strlen(output)], "... ");
+        }
+      }
 
       // Mastervolume
-      if ((frames == firstframe) || ((filt.type & 0xf) != (prevfilt.type & 0xf))) sprintf(&output[strlen(output)], "%01X ", filt.type & 0xf);
-      else sprintf(&output[strlen(output)], ". ");
+      if ((frames == firstframe) || ((filt.type & 0xf) != (prevfilt.type & 0xf))) {
+        if (csv_output) {
+          sprintf(&output[strlen(output)], "$%x,", filt.type & 0xf);
+        } else {
+          sprintf(&output[strlen(output)], "%01X ", filt.type & 0xf);
+        }
+      }
+      else
+      {
+        if (csv_output) {
+          sprintf(&output[strlen(output)], ",");
+        } else {
+          sprintf(&output[strlen(output)], ". ");
+        }
+      }
 
       // Rasterlines / cycle count
       if (profiling)
@@ -445,11 +606,20 @@ int main(int argc, char **argv)
         int rasterlines = (cycles + 62) / 63;
         int badlines = ((cycles + 503) / 504);
         int rasterlinesbad = (badlines * 40 + cycles + 62) / 63;
-        sprintf(&output[strlen(output)], "| %4d %02X %02X ", cycles, rasterlines, rasterlinesbad);
+        if (csv_output) {
+          sprintf(&output[strlen(output)], "%d,$%x,$%x", cycles, rasterlines, rasterlinesbad);
+        } else {
+          sprintf(&output[strlen(output)], "| %4d %02X %02X ", cycles, rasterlines, rasterlinesbad);
+        }
       }
 
       // End of frame display, print info so far and copy SID registers to old registers
-      sprintf(&output[strlen(output)], "|\n");
+      if (csv_output) {
+        sprintf(&output[strlen(output)], "\n");
+      } else {
+        sprintf(&output[strlen(output)], "|\n");
+      }
+
       if ((!lowres) || (!((frames - firstframe) % spacing)))
       {
         printf("%s", output);
@@ -462,7 +632,7 @@ int main(int argc, char **argv)
       for (c = 0; c < 3; c++) prevchn2[c] = chn[c];
 
       // Print note/pattern separators
-      if (spacing)
+      if (!csv_output && spacing)
       {
         counter++;
         if (counter >= spacing)
