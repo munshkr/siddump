@@ -11,4 +11,3 @@ V1.04   - Improved command line handling, added illegal NOP instructions, fixed
           illegal LAX to work again
 V1.05   - Partial support for multispeed tunes
 V1.06   - Added CPU cycle profiling functionality by Stein Pedersen
-
