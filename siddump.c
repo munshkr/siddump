@@ -163,7 +163,7 @@ int main(int argc, char **argv)
   // Usage display
   if ((argc < 2) || (usage))
   {
-    printf("Usage: SIDDUMP <sidfile> [options]\n"
+    fprintf(stderr, "Usage: SIDDUMP <sidfile> [options]\n"
            "Warning: CPU emulation may be buggy/inaccurate, illegals support very limited\n\n"
            "Options:\n"
            "-a<value> Accumulator value on init (subtune number) default = 0\n"
@@ -187,7 +187,7 @@ int main(int argc, char **argv)
     basenote &= 0x7f;
     if ((basenote < 0) || (basenote > 96))
     {
-      printf("Warning: Calibration note out of range. Aborting recalibration.\n");
+      fprintf(stderr, "Warning: Calibration note out of range. Aborting recalibration.\n");
     }
     else
     {
@@ -209,14 +209,14 @@ int main(int argc, char **argv)
   // Open SID file
   if (!sidname)
   {
-    printf("Error: no SID file specified.\n");
+    fprintf(stderr, "Error: no SID file specified.\n");
     return 1;
   }
 
   in = fopen(sidname, "rb");
   if (!in)
   {
-    printf("Error: couldn't open SID file.\n");
+    fprintf(stderr, "Error: couldn't open SID file.\n");
     return 1;
   }
 
@@ -238,7 +238,7 @@ int main(int argc, char **argv)
   loadsize = loadend - loadpos;
   if (loadsize + loadaddress >= 0x10000)
   {
-    printf("Error: SID data continues past end of C64 memory.\n");
+    fprintf(stderr, "Error: SID data continues past end of C64 memory.\n");
     fclose(in);
     return 1;
   }
@@ -246,8 +246,8 @@ int main(int argc, char **argv)
   fclose(in);
 
   // Print info & run initroutine
-  printf("Load address: $%04X Init address: $%04X Play address: $%04X\n", loadaddress, initaddress, playaddress);
-  printf("Calling initroutine with subtune %d\n", subtune);
+  fprintf(stderr, "Load address: $%04X Init address: $%04X Play address: $%04X\n", loadaddress, initaddress, playaddress);
+  fprintf(stderr, "Calling initroutine with subtune %d\n", subtune);
   mem[0x01] = 0x37;
   initcpu(initaddress, subtune, 0, 0);
   instr = 0;
@@ -256,19 +256,19 @@ int main(int argc, char **argv)
     instr++;
     if (instr > MAX_INSTR)
     {
-      printf("Warning: CPU executed a high number of instructions in init, breaking\n");
+      fprintf(stderr, "Warning: CPU executed a high number of instructions in init, breaking\n");
       break;
     }
   }
 
   if (playaddress == 0)
   {
-    printf("Warning: SID has play address 0, reading from interrupt vector instead\n");
+    fprintf(stderr, "Warning: SID has play address 0, reading from interrupt vector instead\n");
     if ((mem[0x01] & 0x07) == 0x5)
       playaddress = mem[0xfffe] | (mem[0xffff] << 8);
     else
       playaddress = mem[0x314] | (mem[0x315] << 8);
-    printf("New play address is $%04X\n", playaddress);
+    fprintf(stderr, "New play address is $%04X\n", playaddress);
   }
 
   // Clear channelstructures in preparation & print first time info
@@ -277,8 +277,9 @@ int main(int argc, char **argv)
   memset(&prevchn, 0, sizeof prevchn);
   memset(&prevchn2, 0, sizeof prevchn2);
   memset(&prevfilt, 0, sizeof prevfilt);
-  printf("Calling playroutine for %d frames, starting from frame %d\n", seconds*50, firstframe);
-  printf("Middle C frequency is $%04X\n\n", freqtbllo[48] | (freqtblhi[48] << 8));
+  fprintf(stderr, "Calling playroutine for %d frames, starting from frame %d\n", seconds*50, firstframe);
+  fprintf(stderr, "Middle C frequency is $%04X\n\n", freqtbllo[48] | (freqtblhi[48] << 8));
+
   printf("| Frame | Freq Note/Abs WF ADSR Pul | Freq Note/Abs WF ADSR Pul | Freq Note/Abs WF ADSR Pul | FCut RC Typ V |");
   if (profiling)
   { // CPU cycles, Raster lines, Raster lines with badlines on every 8th line, first line included
@@ -305,7 +306,7 @@ int main(int argc, char **argv)
       instr++;
       if (instr > MAX_INSTR)
       {
-        printf("Error: CPU executed abnormally high amount of instructions in playroutine, exiting\n");
+        fprintf(stderr, "Error: CPU executed abnormally high amount of instructions in playroutine, exiting\n");
         return 1;
       }
       // Test for jump into Kernal interrupt handler exit
