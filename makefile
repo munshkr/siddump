@@ -1,6 +1,6 @@
 CC=gcc
 CXX=g++
-CFLAGS+=-O3 -Wall
+CFLAGS+=-O3 -Wall -Wno-unused-result
 CXXFLAGS=$(CFLAGS)
 
 siddump: siddump.o cpu.o
